@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <string.h>
-
+#include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -8,6 +8,7 @@
 
 #include "built_in.h"
 
+int status;
 int do_cd(int argc, char** argv) {
   if (!validate_cd_argv(argc, argv))
     return -1;
@@ -37,7 +38,9 @@ int do_fg(int argc, char** argv) {
     return -1;
 
   // TODO: Fill this.
-
+  
+  int k = wait(&status);
+  
   return 0;
 }
 
