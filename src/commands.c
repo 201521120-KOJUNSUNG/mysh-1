@@ -1,13 +1,13 @@
-#include <unistd.h>
-#include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
 #include <string.h>
 #include <assert.h>
 #include <sys/wait.h>
 #include <pthread.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <errno.h>
 #include <sys/un.h>
 #include <sys/socket.h>
@@ -148,12 +148,13 @@ void free_commands(int n_commands, struct single_command (*commands)[512])
 }
 
 void *dread1(void *threadid){
-   
+   FILE *pfile;
+   pfile = fopen("inter2.txt","w+");
    int server_sock, client_sock, len, rc;
    int bytes_rec=0;
    struct sockaddr_un server_sockaddr;
    struct sockaddr_un client_sockaddr;
-   char buf[1000];
+   char buf[256];
    int backlog=10;
    memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
    memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
@@ -176,29 +177,43 @@ void *dread1(void *threadid){
  if(rc==-1){printf("GETPEERNAME ERROR\n");close(server_sock);close(client_sock);exit(1);}
 else{printf("Client socket filepath %s\n", client_sockaddr.sun_path);
 }
- printf("waiting to read...\n"); bytes_rec = recv(client_sock, buf, sizeof(buf), 0);
- if(bytes_rec==-1){printf("RECV ERROR\n");close(server_sock);close(client_sock);exit(1);}
- else{printf("DATA RECEIVED = %s\n", buf);}
- int fd2 = open("a.txt", O_RDONLY);
-  dup2(fd2,0);
+ printf("waiting to read...\n");
+ int check; 
+  while(1){
+  bytes_rec = recv(client_sock, buf, sizeof(buf), 0);
+  if(strcmp(buf,"end")==0){printf("It's done\n");break;}
+  if(strlen(buf)==0)break;
+  check=write(pfile->_fileno,buf,strlen(buf));
+  memset(buf, '\0' ,strlen(buf)); 
+}
+ printf("getting done!!!!!!\n");
+// if(bytes_rec==-1){printf("RECV ERROR\n");close(server_sock);close(client_sock);exit(1);}
+// else{printf("DATA RECEIVED = %s\n", buf);}
+ FILE *pfile1;
+ pfile1 = fopen("inter2.txt","r");
+ dup2(pfile1->_fileno,0);
+  
  pid_t child2 = fork();
  if(child2==0){
   execv(ptemp1[0],ptemp1);
 }
 else{int status3;
   wait(&status3);
+  printf("I came here!!!!!!!!!!!\n");
   close(server_sock);
   close(client_sock);
-return 0;
 }
+exit(1);
 }
 void *dread2(void *threadid){
+ char ccc[256];
+ FILE *pf;
  int status1;
  pid_t child;
  int client_sock, rc, len;
  struct sockaddr_un server_sockaddr;
  struct sockaddr_un client_sockaddr;
- char buf[1000];
+ char buf[256];
  memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
  memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
  client_sock = socket(AF_UNIX, SOCK_STREAM,0);
@@ -208,12 +223,18 @@ unlink(CLIENT_PATH);
 rc = bind(client_sock, (struct sockaddr *) &client_sockaddr, len);
 if(rc==-1){printf("BIND ERROR\n");close(client_sock);exit(1);}
 server_sockaddr.sun_family = AF_UNIX;strcpy(server_sockaddr.sun_path,SERVER_PATH);
-rc = connect(client_sock, (struct sockaddr *) &server_sockaddr,len);
-if(rc==-1){printf("CONNECT ERROR\n");close(client_sock);exit(1);}
-strcpy(buf,DATA);
-int fd= open("a.txt", O_WRONLY | O_CREAT);
-int bk = open("dummy",O_WRONLY | O_CREAT);
-dup2(fd,1);
+while(connect(client_sock, (struct sockaddr *) &server_sockaddr,len)==-1)
+{
+//if(rc==-1){printf("CONNECT ERROR\n");close(client_sock);exit(1);}
+ printf("trying\n");
+}
+printf("connect done\n");
+pf = fopen("inter1.txt","w+");
+int bk = open("dummy", O_WRONLY | O_CREAT);
+close(bk);
+printf("opened\n");
+dup2(1,bk);
+dup2(pf->_fileno,1);
 
 child=fork();
 if(child==0){
@@ -221,18 +242,27 @@ if(child==0){
  execv(ptemp[0],ptemp);
 }
 else{
-wait(&status1);//here I should write content of temp.txt into buf
-close(bk);
-dup2(1,bk);
-dup2(fd,1);
-close(fd);
+wait(&status1);//Here I should send intet.txt content by socket`
+close(pf->_fileno);
 dup2(bk,1);
 remove("dummy");
 printf("Sending data...\n");
+//read the file content to buf
+FILE *reading = fopen("inter1.txt","r");
+while(fgets(ccc,255,reading)!=NULL){
+
+strcpy(buf,ccc);
 rc = send(client_sock, buf, strlen(buf), 0);
-if(rc == -1){printf("SEND ERROR\n"); close(client_sock); exit(1);}
-else{printf("Data Sent!\n");}
-close(client_sock);
-return 0;
+
 }
+
+strcpy(buf,"end");
+rc=send(client_sock,buf,strlen(buf),0);
+//if(rc == -1){printf("SEND ERROR\n"); close(client_sock); exit(1);}
+//else{printf("Data Sent!\n");}
+printf("done\n");
+close(client_sock);
+}
+sleep(10);
+exit(1);
 }
