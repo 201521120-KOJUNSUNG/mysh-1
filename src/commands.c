@@ -236,8 +236,7 @@ pp2=0;
 int status9;
 //pthread_join(threads[1],(void**)&status9);
 mutex=1;
-while(1){printf("waiting for dread2\n");if(mutex1==1)break;}
-printf("dread 1 is over\n");
+while(1){if(mutex1==1)break;}
 mutex=0;
 mutex1=0;
 mutex2=0;
@@ -327,8 +326,7 @@ close(client_sock);
 
 //close(pf->_fileno);
 mutex1=1;
-while(1){printf("waiting for dread 1\n");if(mutex==1)break;}
-printf("dread 2 is over\n");
+while(1){if(mutex==1)break;}
 exit(1);
 }
 }
