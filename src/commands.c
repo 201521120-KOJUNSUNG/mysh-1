@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -13,16 +14,21 @@
 #include <sys/socket.h>
 #include "commands.h"
 #include "built_in.h"
+#include "signal_handlers.h"
 #define SOCK_PATH "server.txt"
 #define SERVER_PATH "server.txt"
 #define CLIENT_PATH "client.txt"
 #define DATA "I am Client"
-
+int mutex=0;
+int mutex1=0;
+int mutex2=0;
 void *dread1(void *threadid);
 void *dread2(void *threadid);
 int back_pid;
 char ** ptemp;
 char ** ptemp1;
+int pp1;
+int pp2;
 static struct built_in_command built_in_commands[] = {
   { "cd", do_cd, validate_cd_argv },
   { "pwd", do_pwd, validate_pwd_argv },
@@ -46,13 +52,23 @@ static int is_built_in_command(const char* command_name)
  * Description: Currently this function only handles single built_in commands. You should modify this structure to launch process and offer pipeline functionality.
  */
 int evaluate_command(int n_commands, struct single_command (*commands)[512])
-{  
+{ pthread_t threads[2]; 
+  for(int i=0; i<pp1; i++){
+  free(ptemp[i]);
+}
+free(ptemp);
+  for(int j=0; j<pp2; j++){
+ free(ptemp1[j]);
+}
+free(ptemp1);
+  signal(SIGINT, (void *)catch_sigint);
   pid_t child_pid; int status; int backcheck=0;int pipecheck=0; 
  // if(strcmp(com->argv[com->argc-1],"&")==0){ strcpy(com->argv[com->argc-1],"");backcheck=1;}
  // if(child_pid==0){
   if (n_commands > 0) {
     struct single_command* com = (*commands); 
     assert(com->argc != 0);
+    
     if(strcmp(com->argv[com->argc-1],"&")==0){ com->argc=com->argc-1;backcheck=1;}
  //   if(getpid()!=old_pid){child_pid = fork();}
     
@@ -79,24 +95,25 @@ int evaluate_command(int n_commands, struct single_command (*commands)[512])
    
   
   if((com+1)->argc>0){
+  pp1=com->argc;
   ptemp=(char**)malloc(sizeof(char*)*(com->argc));
   for(int i=0; i<com->argc; i++){
   ptemp[i]= (char*)malloc(sizeof(char)*sizeof(com->argv[i]));
  strcpy(ptemp[i],com->argv[i]);
 }
+ pp2=(com+1)->argc;
  ptemp1=(char**)malloc(sizeof(char*)*((com+1)->argc));
  for(int i=0; i<(com+1)->argc;i++){
  ptemp1[i] = (char*)malloc(sizeof(char)*sizeof((com+1)->argv[i]));
  strcpy(ptemp1[i],(com+1)->argv[i]);
 }
-  pthread_t threads[2];
-  
+  int stst;
   int rc;
   int t1=0;
   int t2=1;
-  rc = pthread_create(&threads[0], NULL, dread1, (void *)&t1);
+//  rc = pthread_create(&threads[0], NULL, dread1, (void *)&t1);
   rc = pthread_create(&threads[1], NULL, dread2, (void *)&t2);
- printf("came here\n");
+  rc = pthread_create(&threads[0],NULL,dread1,(void *)&t1);
  return 0;
 }//pipecheck
      if(backcheck==1){
@@ -158,54 +175,77 @@ void *dread1(void *threadid){
    int backlog=10;
    memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
    memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
-   memset(buf, 0, 1000);
+   memset(buf, 0, 255);
    server_sock = socket(AF_UNIX, SOCK_STREAM, 0);
-   if(client_sock==-1){printf("SOCKET ERROR\n");exit(1);}
+   if(client_sock==-1){exit(1);}
    server_sockaddr.sun_family = AF_UNIX;
    strcpy(server_sockaddr.sun_path, SOCK_PATH);
    len = sizeof(server_sockaddr);
    unlink(SOCK_PATH);
    rc = bind(server_sock, (struct sockaddr *) &server_sockaddr,len);
-   if(rc==-1){printf("BIND ERROR\n");close(server_sock);exit(1);}
-   rc = listen(server_sock, backlog);
-   if(rc==-1){printf("LISTEN ERROR\n");close(server_sock);exit(1);}
-   printf("sock listening...\n");
+   if(rc==-1){close(server_sock);exit(1);}
+
+   while(listen(server_sock, backlog)==-1){};
+   if(rc==-1){close(server_sock);exit(1);}
    client_sock = accept(server_sock, (struct sockaddr *) &client_sockaddr, &len);
-   if(rc==-1){printf("ACCEPT ERROR\n"); close(server_sock);close(client_sock);exit(1);}
+   if(rc==-1){ close(server_sock);close(client_sock);exit(1);}
    len = sizeof(client_sockaddr);
    rc = getpeername(client_sock, (struct sockaddr *) &client_sockaddr, &len);
- if(rc==-1){printf("GETPEERNAME ERROR\n");close(server_sock);close(client_sock);exit(1);}
-else{printf("Client socket filepath %s\n", client_sockaddr.sun_path);
-}
- printf("waiting to read...\n");
- int check; 
+ if(rc==-1){close(server_sock);close(client_sock);exit(1);}
+ int check;  
   while(1){
   bytes_rec = recv(client_sock, buf, sizeof(buf), 0);
-  if(strcmp(buf,"end")==0){printf("It's done\n");break;}
-  if(strlen(buf)==0)break;
+  if(strcmp(buf,"end")==0){break;}
   check=write(pfile->_fileno,buf,strlen(buf));
-  memset(buf, '\0' ,strlen(buf)); 
+  memset(buf, '\0' ,strlen(buf));
+  sleep(0.1);  
 }
- printf("getting done!!!!!!\n");
+ memset(buf,'\0',strlen(buf));
 // if(bytes_rec==-1){printf("RECV ERROR\n");close(server_sock);close(client_sock);exit(1);}
 // else{printf("DATA RECEIVED = %s\n", buf);}
  FILE *pfile1;
+ int status3;
+ int std_fd;
  pfile1 = fopen("inter2.txt","r");
+ std_fd = open("dummy2.txt", O_WRONLY | O_CREAT);
+ close(std_fd);
+ dup2(0,std_fd);
  dup2(pfile1->_fileno,0);
-  
- pid_t child2 = fork();
+ while(1){if(mutex1==1)break;}
+ pid_t child2;
+ child2 = fork();
  if(child2==0){
   execv(ptemp1[0],ptemp1);
 }
-else{int status3;
+else{
   wait(&status3);
-  printf("I came here!!!!!!!!!!!\n");
+  mutex=1;
+  close(pfile->_fileno);
+  close(pfile1->_fileno);
+  dup2(std_fd,0);
+  remove("dummy2.txt");
   close(server_sock);
   close(client_sock);
+
+//remove("inter2.txt");
+for(int i=0; i<pp2; i++){
+free(ptemp1[i]);
 }
+free(ptemp1);
+pp2=0;
+int status9;
+//pthread_join(threads[1],(void**)&status9);
+mutex=1;
+while(1){printf("waiting for dread2\n");if(mutex1==1)break;}
+printf("dread 1 is over\n");
+mutex=0;
+mutex1=0;
+mutex2=0;
 exit(1);
 }
+}
 void *dread2(void *threadid){
+ int cc;
  char ccc[256];
  FILE *pf;
  int status1;
@@ -217,52 +257,78 @@ void *dread2(void *threadid){
  memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
  memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
  client_sock = socket(AF_UNIX, SOCK_STREAM,0);
- if(client_sock==-1){printf("SOCKET ERROR\n");exit(1);}
+ if(client_sock==-1){exit(1);}
  client_sockaddr.sun_family = AF_UNIX; strcpy(client_sockaddr.sun_path, CLIENT_PATH);len=sizeof(client_sockaddr);
 unlink(CLIENT_PATH);
 rc = bind(client_sock, (struct sockaddr *) &client_sockaddr, len);
-if(rc==-1){printf("BIND ERROR\n");close(client_sock);exit(1);}
+if(rc==-1){close(client_sock);exit(1);}
 server_sockaddr.sun_family = AF_UNIX;strcpy(server_sockaddr.sun_path,SERVER_PATH);
 while(connect(client_sock, (struct sockaddr *) &server_sockaddr,len)==-1)
 {
 //if(rc==-1){printf("CONNECT ERROR\n");close(client_sock);exit(1);}
- printf("trying\n");
 }
-printf("connect done\n");
-pf = fopen("inter1.txt","w+");
+pf = fopen("inter1.txt","w");
+if(pf==NULL)printf("open err\n");
+int cccheck;
 int bk = open("dummy", O_WRONLY | O_CREAT);
 close(bk);
-printf("opened\n");
 dup2(1,bk);
-dup2(pf->_fileno,1);
-
+cccheck=dup2(pf->_fileno,1);
 child=fork();
+if(child==-1)printf("fork err\n");
+//printf("argv[0]=%s, argv[1] = %s, argc = %d\n",ptemp[0],ptemp[1],pp1);
 if(child==0){
- 
- execv(ptemp[0],ptemp);
+
+ cc=execv(ptemp[0],ptemp);
+
+// if(cc==-1)printf("execv err\n");
 }
 else{
-wait(&status1);//Here I should send intet.txt content by socket`
+wait(&status1);//Here I should send intet.txt content by socket
+for(int i=0; i<pp1; i++){
+free(ptemp[i]);
+}
+free(ptemp);
 close(pf->_fileno);
 dup2(bk,1);
 remove("dummy");
-printf("Sending data...\n");
+mutex=1;
+FILE * reading = fopen("inter1.txt","r");
+if(reading == NULL)printf("open err\n");
 //read the file content to buf
-FILE *reading = fopen("inter1.txt","r");
 while(fgets(ccc,255,reading)!=NULL){
-
 strcpy(buf,ccc);
+sleep(0.1);
 rc = send(client_sock, buf, strlen(buf), 0);
 
 }
-
+//remove("inter1.txt");
+sleep(0.1);
 strcpy(buf,"end");
 rc=send(client_sock,buf,strlen(buf),0);
+memset(buf,'\0',strlen(buf));
+//printf("dread2 almost done\n");
 //if(rc == -1){printf("SEND ERROR\n"); close(client_sock); exit(1);}
 //else{printf("Data Sent!\n");}
-printf("done\n");
+int status6;
+close(pf->_fileno);
+close(reading->_fileno);
+mutex2=1;
+//for(int i=0; i<pp1; i++){
+//free(ptemp[i]);
+//}
+//free(ptemp);
+pp1=0;
+if(cccheck==-1)printf("dup err\n");
+if(cc==-1)printf("execv err\n");
+
+//pthread_join(threads[0],(void**)&status6); 
 close(client_sock);
-}
-sleep(10);
+
+//close(pf->_fileno);
+mutex1=1;
+while(1){printf("waiting for dread 1\n");if(mutex==1)break;}
+printf("dread 2 is over\n");
 exit(1);
+}
 }

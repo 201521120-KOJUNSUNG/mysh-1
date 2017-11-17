@@ -1,18 +1,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <signal.h>
+#include <unistd.h>
 #include "commands.h"
 #include "built_in.h"
 #include "utils.h"
-
+#include "signal_handlers.h"
 int main()
-{
+{  
+
+  signal(SIGTSTP, (void *)catch_sigtstp);
+  signal(SIGINT, (void *)catch_sigint);
   char buf[8096];
 
   while (1) {
+    signal(SIGINT, (void *)catch_sigint);
+    signal(SIGTSTP, (void *)catch_sigtstp);
     fgets(buf, 8096, stdin);
-
+    signal(SIGINT, (void *)catch_sigint);
+    signal(SIGTSTP, (void *)catch_sigtstp);
     struct single_command commands[512];
     int n_commands = 0;
     mysh_parse_command(buf, &n_commands, &commands);
